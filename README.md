@@ -2,7 +2,7 @@
 
 A high-performance, visually appealing Home Assistant custom card for monitoring water tanks. It features dynamic animations for rain inflow and usage outflow, temperature-based color shifting, and safety warnings.
 
-Water Tank Card
+![Water Tank Card](https://github.com/user-attachments/assets/placeholder)
 
 ## Features
 - **Dynamic Water Level**: Real-time visualization of tank volume.
@@ -26,7 +26,7 @@ Water Tank Card
 ### Manual
 1. Download `water-tank-card.js` and `water-tank-card-editor.js`.
 2. Save them to `/config/www/`.
-3. Add the following to your Lovelace resources:
+3. Add the following to your Dashboard resources:
    ```yaml
    url: /local/water-tank-card.js
    type: module
@@ -34,7 +34,7 @@ Water Tank Card
 
 ## Configuration
 
-You can configure this card using the **Visual Editor** in Lovelace, or via YAML:
+You can configure this card using the **Visual Editor** in your Dashboard, or via YAML:
 
 ```yaml
 type: custom:water-tank-card
@@ -66,5 +66,3 @@ low_level_threshold: 10
 
 ## License
 MIT
-
-
