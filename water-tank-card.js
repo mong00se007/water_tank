@@ -2,10 +2,11 @@ import {
   LitElement,
   html,
   css,
+  svg,
 } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
-// Version 22.0 - Stable IDs, solid fill water
-console.info("%c WATER-TANK-CARD %c v22.0.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
+// Version 23.0 - SVG namespace fix
+console.info("%c WATER-TANK-CARD %c v23.0.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
 
 class WaterTankCard extends LitElement {
   static get properties() {
@@ -40,8 +41,7 @@ class WaterTankCard extends LitElement {
       throw new Error("Please define a volume entity");
     }
     this.config = config;
-    // Stable unique ID for SVG defs — computed once, never changes between renders
-    this._uid = 'wtc-' + config.entity.replace(/[^a-z0-9]/gi, '').substr(0, 10);
+    this._uid = 'wtc' + config.entity.replace(/[^a-z0-9]/gi, '').substr(0, 10);
   }
 
   render() {
@@ -55,7 +55,7 @@ class WaterTankCard extends LitElement {
     const inflowRateObj = this.hass.states[this.config.inflow_entity];
     const outflowObj = this.hass.states[this.config.outflow_entity];
 
-    // --- OUTFLOW LOGIC ---
+    // --- OUTFLOW ---
     let isOutflow = false;
     if (outflowObj) {
       const s = String(outflowObj.state).toLowerCase().trim();
@@ -63,8 +63,6 @@ class WaterTankCard extends LitElement {
         isOutflow = true;
       }
       console.debug(`[water-tank-card] outflow "${this.config.outflow_entity}" = "${outflowObj.state}" → ${isOutflow}`);
-    } else if (this.config.outflow_entity) {
-      console.debug(`[water-tank-card] outflow entity "${this.config.outflow_entity}" NOT FOUND`);
     }
 
     // --- VOLUME ---
@@ -104,7 +102,7 @@ class WaterTankCard extends LitElement {
       inflowRate = parseFloat(inflowRateObj.state);
     }
 
-    // --- RAIN TOTAL ---
+    // --- RAIN ---
     const rainTotalRaw = (rainTotalObj && !isNaN(parseFloat(rainTotalObj.state))) ? parseFloat(rainTotalObj.state) : 0;
     const roofSize = this.config.roof_size || 100;
     let displayRainTotal = isUS ? (rainTotalRaw * roofSize * 0.264172) : (rainTotalRaw * roofSize);
@@ -116,7 +114,7 @@ class WaterTankCard extends LitElement {
     const isTempWarning = tempC !== null && tempC > tempThreshold;
     const isLowWarning = percentage <= lowLevelThreshold;
 
-    // --- WATER COLORS (solid, no gradients needed) ---
+    // --- COLORS ---
     let wTop = "#22d3ee";
     let wMid = "#0284c7";
     let wBot = "#0c4a6e";
@@ -132,7 +130,7 @@ class WaterTankCard extends LitElement {
     }
 
     const wp = percentage;
-    const u = this._uid; // stable ID
+    const u = this._uid;
 
     /* ============ CYLINDER GEOMETRY ============ */
     const cx = 100;
@@ -145,23 +143,18 @@ class WaterTankCard extends LitElement {
     const waterSurfY = botY - (bodyH * wp / 100);
     const waterH = botY - waterSurfY;
 
-    // Inflow pipe: center top
+    // Pipe geometry
     const pipeInEndX = cx;
     const pipeInY = topY - 20;
-
-    // Outflow pipe: right side near bottom, short
     const pipeOutStartY = botY - 15;
     const pipeOutEndX = cx + rx + 32;
     const pipeOutBendY = botY + 20;
 
-    // Helper: cylinder water body path (from surfY down to botY with bottom ellipse arc)
-    const waterPath = (surfY, inset) => {
-      const left = cx - rx + inset;
-      const right = cx + rx - inset;
-      const arcRx = rx - inset;
-      const arcRy = ry - 1;
-      return `M${left} ${surfY} L${left} ${botY} A${arcRx} ${arcRy} 0 0 0 ${right} ${botY} L${right} ${surfY} Z`;
-    };
+    // Water body path with curved bottom (sweep=1 = arc goes downward)
+    const wL = cx - rx + 3;
+    const wR = cx + rx - 3;
+    const wRx = rx - 3;
+    const wRy = ry - 1;
 
     return html`
       <ha-card>
@@ -176,14 +169,12 @@ class WaterTankCard extends LitElement {
           <div class="tank-container">
             <svg class="tank-svg" viewBox="0 0 200 200" style="overflow: visible;">
               <defs>
-                <!-- Pipe gradient (stable ID, works fine) -->
                 <linearGradient id="pg-${u}" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stop-color="#78909c"/>
                   <stop offset="30%" stop-color="#eceff1"/>
                   <stop offset="70%" stop-color="#90a4ae"/>
                   <stop offset="100%" stop-color="#546e7a"/>
                 </linearGradient>
-                <!-- Cylinder shading -->
                 <linearGradient id="cy-${u}" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stop-color="var(--primary-text-color)" stop-opacity="0.12"/>
                   <stop offset="15%" stop-color="var(--primary-text-color)" stop-opacity="0.04"/>
@@ -191,28 +182,27 @@ class WaterTankCard extends LitElement {
                   <stop offset="85%" stop-color="var(--primary-text-color)" stop-opacity="0.04"/>
                   <stop offset="100%" stop-color="var(--primary-text-color)" stop-opacity="0.14"/>
                 </linearGradient>
-                <!-- Shadow -->
                 <filter id="sh-${u}" x="-15%" y="-10%" width="130%" height="130%">
                   <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.2)"/>
                 </filter>
               </defs>
 
-              <!-- ====== INFLOW PIPE (center top) ====== -->
+              <!-- INFLOW PIPE -->
               <rect x="8" y="${pipeInY - 5}" width="${pipeInEndX - 8}" height="10" rx="2" fill="url(#pg-${u})"/>
               <rect x="${pipeInEndX - 5}" y="${pipeInY}" width="10" height="${topY - pipeInY + ry + 2}" rx="2" fill="url(#pg-${u})"/>
               <circle cx="${pipeInEndX}" cy="${pipeInY}" r="7" fill="url(#pg-${u})" stroke="#546e7a" stroke-width="0.8"/>
               <circle cx="${pipeInEndX}" cy="${pipeInY}" r="3" fill="#b0bec5"/>
               <rect x="5" y="${pipeInY - 7}" width="6" height="14" rx="2" fill="#546e7a"/>
 
-              <!-- ====== OUTFLOW PIPE (right, short) ====== -->
+              <!-- OUTFLOW PIPE -->
               <rect x="${cx + rx - 3}" y="${pipeOutStartY - 5}" width="${pipeOutEndX - cx - rx + 6}" height="10" rx="2" fill="url(#pg-${u})"/>
               <rect x="${pipeOutEndX - 5}" y="${pipeOutStartY}" width="10" height="${pipeOutBendY - pipeOutStartY}" rx="2" fill="url(#pg-${u})"/>
               <circle cx="${pipeOutEndX}" cy="${pipeOutStartY}" r="7" fill="url(#pg-${u})" stroke="#546e7a" stroke-width="0.8"/>
               <circle cx="${pipeOutEndX}" cy="${pipeOutStartY}" r="3" fill="#b0bec5"/>
               <path d="M${pipeOutEndX - 6} ${pipeOutBendY} L${pipeOutEndX - 3} ${pipeOutBendY + 5} L${pipeOutEndX + 3} ${pipeOutBendY + 5} L${pipeOutEndX + 6} ${pipeOutBendY} Z" fill="#546e7a"/>
 
-              <!-- ====== OUTFLOW WATER ====== -->
-              ${isOutflow ? html`
+              <!-- OUTFLOW WATER — uses svg`` not html`` -->
+              ${isOutflow ? svg`
               <rect x="${cx + rx}" y="${pipeOutStartY - 2}" width="${pipeOutEndX - cx - rx}" height="4" fill="${wMid}" opacity="0.85"/>
               <line class="outflow-dash-h" x1="${cx + rx}" y1="${pipeOutStartY}" x2="${pipeOutEndX}" y2="${pipeOutStartY}" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
               <rect x="${pipeOutEndX - 2}" y="${pipeOutStartY}" width="4" height="${pipeOutBendY - pipeOutStartY + 3}" fill="${wMid}" opacity="0.85"/>
@@ -222,7 +212,7 @@ class WaterTankCard extends LitElement {
               <circle class="drip d3" cx="${pipeOutEndX}" cy="${pipeOutBendY + 26}" r="1.5" fill="${wMid}" opacity="0.4"/>
               ` : ""}
 
-              <!-- ====== 3D CYLINDER TANK ====== -->
+              <!-- 3D CYLINDER -->
               <g filter="url(#sh-${u})">
                 <!-- Back rim -->
                 <path d="M${cx - rx} ${topY} A${rx} ${ry} 0 0 1 ${cx + rx} ${topY}" fill="var(--primary-text-color)" fill-opacity="0.06" stroke="var(--primary-text-color)" stroke-width="1.5" stroke-opacity="0.4"/>
@@ -230,30 +220,19 @@ class WaterTankCard extends LitElement {
                 <rect x="${cx - rx}" y="${topY}" width="${rx * 2}" height="${bodyH}" fill="url(#cy-${u})"/>
                 <rect x="${cx - rx}" y="${topY}" width="5" height="${bodyH}" fill="white" fill-opacity="0.05"/>
 
-                <!-- ====== WATER FILL (solid colors, NO url() gradients) ====== -->
-                ${wp > 0 ? html`
-                <!-- Layer 1: Deep bottom color (full water height) -->
-                <path d="${waterPath(waterSurfY, 2)}" fill="${wBot}"/>
-
-                <!-- Layer 2: Mid color (upper 75% of water) -->
-                ${waterH > 8 ? html`
-                <path d="${waterPath(waterSurfY, 2)}" fill="${wMid}" opacity="0.6"/>
-                ` : ""}
-
-                <!-- Layer 3: Light top band (upper 35% of water) -->
-                ${waterH > 15 ? html`
-                <rect x="${cx - rx + 3}" y="${waterSurfY}" width="${(rx - 3) * 2}" height="${Math.min(waterH * 0.35, 30)}" fill="${wTop}" opacity="0.35" rx="2"/>
-                ` : ""}
-
-                <!-- Specular highlight (left side shine) -->
-                <rect x="${cx - rx + 2}" y="${waterSurfY}" width="12" height="${waterH}" fill="white" opacity="0.08" rx="1"/>
-
-                <!-- Caustic light patches -->
-                ${waterH > 25 ? html`
+                <!-- WATER FILL — uses svg`` for correct SVG namespace -->
+                ${wp > 0 ? svg`
+                <path d="M${wL} ${waterSurfY} L${wL} ${botY} A${wRx} ${wRy} 0 0 1 ${wR} ${botY} L${wR} ${waterSurfY} Z" fill="${wBot}"/>
+                <path d="M${wL} ${waterSurfY} L${wL} ${botY} A${wRx} ${wRy} 0 0 1 ${wR} ${botY} L${wR} ${waterSurfY} Z" fill="${wMid}" opacity="0.55"/>
+                ${waterH > 15 ? svg`
+                <rect x="${wL}" y="${waterSurfY}" width="${wR - wL}" height="${Math.min(waterH * 0.35, 30)}" fill="${wTop}" opacity="0.3"/>
+                ` : svg``}
+                <rect x="${wL}" y="${waterSurfY}" width="10" height="${waterH}" fill="white" opacity="0.08"/>
+                ${waterH > 25 ? svg`
                 <ellipse cx="${cx - 8}" cy="${waterSurfY + waterH * 0.4}" rx="14" ry="7" fill="white" opacity="0.05"/>
                 <ellipse cx="${cx + 15}" cy="${waterSurfY + waterH * 0.65}" rx="10" ry="5" fill="white" opacity="0.04"/>
-                ` : ""}
-                ` : ""}
+                ` : svg``}
+                ` : svg``}
 
                 <!-- Walls -->
                 <line x1="${cx - rx}" y1="${topY}" x2="${cx - rx}" y2="${botY}" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.45"/>
@@ -262,42 +241,42 @@ class WaterTankCard extends LitElement {
                 <!-- Bottom ellipse -->
                 <path d="M${cx - rx} ${botY} A${rx} ${ry} 0 0 0 ${cx + rx} ${botY}" fill="var(--primary-text-color)" fill-opacity="0.08" stroke="var(--primary-text-color)" stroke-width="1.5" stroke-opacity="0.4"/>
 
-                <!-- Water surface ellipse -->
-                ${wp > 1 ? html`
+                <!-- Water surface -->
+                ${wp > 1 ? svg`
                 <ellipse class="water-surface" cx="${cx}" cy="${waterSurfY}" rx="${rx - 2}" ry="${ry - 1}" fill="${wTop}" fill-opacity="0.7" stroke="${wTop}" stroke-width="1" stroke-opacity="0.5"/>
                 <ellipse cx="${cx - 5}" cy="${waterSurfY - 1}" rx="${rx * 0.4}" ry="${ry * 0.25}" fill="white" opacity="0.18"/>
-                ` : ""}
+                ` : svg``}
 
                 <!-- Bottom water arc -->
-                ${wp > 0 ? html`
-                <path d="M${cx - rx + 2} ${botY} A${rx - 2} ${ry - 1} 0 0 0 ${cx + rx - 2} ${botY}" fill="${wBot}" opacity="0.6"/>
-                ` : ""}
+                ${wp > 0 ? svg`
+                <path d="M${wL} ${botY} A${wRx} ${wRy} 0 0 0 ${wR} ${botY}" fill="${wBot}" opacity="0.6"/>
+                ` : svg``}
 
                 <!-- Front rim -->
                 <path d="M${cx - rx} ${topY} A${rx} ${ry} 0 0 0 ${cx + rx} ${topY}" fill="none" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.5"/>
                 <path d="M${cx - rx + 12} ${topY + ry * 0.55} A${rx - 12} ${ry * 0.35} 0 0 0 ${cx + rx - 12} ${topY + ry * 0.55}" fill="none" stroke="white" stroke-width="0.8" stroke-opacity="0.15"/>
 
                 <!-- Bubbles -->
-                ${wp > 8 ? html`
+                ${wp > 8 ? svg`
                 <circle class="bubble b1" cx="${cx - 16}" cy="${botY - 15}" r="2" fill="white" opacity="0.3"/>
                 <circle class="bubble b2" cx="${cx + 12}" cy="${botY - 10}" r="1.5" fill="white" opacity="0.25"/>
                 <circle class="bubble b3" cx="${cx + 24}" cy="${botY - 22}" r="2.2" fill="white" opacity="0.2"/>
                 <circle class="bubble b4" cx="${cx - 6}" cy="${botY - 8}" r="1.8" fill="white" opacity="0.28"/>
-                ` : ""}
+                ` : svg``}
               </g>
 
-              <!-- ====== INFLOW STREAM ====== -->
-              ${inflowRate > 0 ? html`
+              <!-- INFLOW STREAM -->
+              ${inflowRate > 0 ? svg`
               <line class="flow-stream" x1="${pipeInEndX}" y1="${topY + ry + 2}" x2="${pipeInEndX}" y2="${Math.min(waterSurfY - 2, botY - 5)}" stroke="${wTop}" stroke-width="5" stroke-linecap="round" stroke-dasharray="6 8" opacity="0.85"/>
               <circle class="splash s1" cx="${pipeInEndX - 8}" cy="${waterSurfY}" r="2" fill="${wTop}" opacity="0.6"/>
               <circle class="splash s2" cx="${pipeInEndX + 7}" cy="${waterSurfY - 2}" r="1.8" fill="${wTop}" opacity="0.5"/>
               <circle class="splash s3" cx="${pipeInEndX + 10}" cy="${waterSurfY - 1}" r="1.5" fill="${wTop}" opacity="0.5"/>
-              ` : ""}
+              ` : svg``}
 
               <!-- Level markers -->
               ${[25, 50, 75].map(lvl => {
                 const mY = botY - (bodyH * lvl / 100);
-                return html`<line x1="${cx - rx + 3}" y1="${mY}" x2="${cx - rx + 11}" y2="${mY}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>`;
+                return svg`<line x1="${cx - rx + 3}" y1="${mY}" x2="${cx - rx + 11}" y2="${mY}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>`;
               })}
             </svg>
 
