@@ -4,8 +4,8 @@ import {
   css,
 } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
-// Version 20.1 - Water & Outflow Fixes
-console.info("%c WATER-TANK-CARD %c v20.1.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
+// Version 21.0 - 3D Cylinder Tank
+console.info("%c WATER-TANK-CARD %c v21.0.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
 
 class WaterTankCard extends LitElement {
   static get properties() {
@@ -114,325 +114,299 @@ class WaterTankCard extends LitElement {
     const isTempWarning = tempC !== null && tempC > tempThreshold;
     const isLowWarning = percentage <= lowLevelThreshold;
 
-    // Water color with temperature gradient — vivid blues
-    let waterColorTop = "#22d3ee";
-    let waterColorMid = "#0284c7";
-    let waterColorBottom = "#0c4a6e";
+    // Water colors — vivid blues, shift warm with temperature
+    let wTop = "#22d3ee";
+    let wMid = "#0284c7";
+    let wBot = "#0c4a6e";
     if (tempC !== null) {
       if (isTempWarning) {
-        waterColorTop = "#fb923c";
-        waterColorMid = "#ea580c";
-        waterColorBottom = "#7c2d12";
+        wTop = "#fb923c";
+        wMid = "#ea580c";
+        wBot = "#7c2d12";
       } else {
-        const ratio = Math.max(0, Math.min(1, tempC / tempThreshold));
-        // Shift from cool cyan-blue towards warm
-        const rT = Math.round(34 + (251 - 34) * ratio);
-        const gT = Math.round(211 + (146 - 211) * ratio);
-        const bT = Math.round(238 + (60 - 238) * ratio);
-        waterColorTop = `rgb(${rT}, ${gT}, ${bT})`;
-        const rM = Math.round(2 + (234 - 2) * ratio);
-        const gM = Math.round(132 + (88 - 132) * ratio);
-        const bM = Math.round(199 + (12 - 199) * ratio);
-        waterColorMid = `rgb(${rM}, ${gM}, ${bM})`;
-        const rB = Math.round(12 + (124 - 12) * ratio);
-        const gB = Math.round(74 + (45 - 74) * ratio);
-        const bB = Math.round(110 + (18 - 110) * ratio);
-        waterColorBottom = `rgb(${rB}, ${gB}, ${bB})`;
+        const r = Math.max(0, Math.min(1, tempC / tempThreshold));
+        wTop = `rgb(${Math.round(34 + 217 * r)}, ${Math.round(211 - 65 * r)}, ${Math.round(238 - 178 * r)})`;
+        wMid = `rgb(${Math.round(2 + 232 * r)}, ${Math.round(132 - 44 * r)}, ${Math.round(199 - 187 * r)})`;
+        wBot = `rgb(${Math.round(12 + 112 * r)}, ${Math.round(74 - 29 * r)}, ${Math.round(110 - 92 * r)})`;
       }
     }
 
-    const waterPercent = percentage;
+    const wp = percentage; // water percent
 
-    /* GEOMETRY */
-    const tankX = 50;
-    const tankY = 40;
-    const tankW = 100;
-    const tankH = 120;
-    const tankR = 8;
+    /* ============ CYLINDER GEOMETRY ============ */
+    const cx = 100;       // center X
+    const rx = 48;        // horizontal radius of ellipse
+    const ry = 14;        // vertical radius (perspective depth)
+    const topY = 38;      // Y of top ellipse center
+    const botY = 158;     // Y of bottom ellipse center
+    const bodyH = botY - topY; // height of the cylinder body
 
-    // Water rect inside tank
-    const waterTop = tankY + tankH * (1 - waterPercent / 100);
-    const waterHeight = tankH * waterPercent / 100;
-    const waterInset = 3;
+    // Water surface Y position
+    const waterSurfY = botY - (bodyH * wp / 100);
+    // Water body spans from waterSurfY down to botY
 
-    // Wave path at water surface
-    const waveY = waterTop;
-    const waveLeft = tankX + waterInset;
-    const waveRight = tankX + tankW - waterInset;
-    const waveW = waveRight - waveLeft;
+    // Inflow pipe: comes from left, bends down into tank top
+    const pipeInEndX = cx - 15;
+    const pipeInY = topY - 18;
 
-    // Inflow pipe: top-left, goes right then down into tank
-    const pipeInX1 = 10;
-    const pipeInY = 22;
-    const pipeInX2 = tankX + 18;
-    const pipeInBendY = tankY;
+    // Outflow pipe: exits right side of tank near bottom, goes right then down
+    const pipeOutStartY = botY - 18;
+    const pipeOutEndX = 188;
+    const pipeOutBendY = botY + 30;
 
-    // Outflow pipe: exits right side of tank near bottom, goes right then bends down
-    const pipeOutX1 = tankX + tankW;
-    const pipeOutY = tankY + tankH - 15;
-    const pipeOutX2 = 182;
-    const pipeOutBendY = tankY + tankH + 28;
-
-    // Unique IDs per instance to avoid SVG gradient conflicts when multiple cards exist
-    const uid = Math.random().toString(36).substr(2, 6);
+    // Unique ID prefix for SVG defs
+    const u = Math.random().toString(36).substr(2, 6);
 
     return html`
-            <ha-card>
-                <div class="card-content">
-                    <div class="header">
-                        <svg class="header-icon" viewBox="0 0 24 24" width="20" height="20">
-                            <path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/>
-                        </svg>
-                        <span>${this.config.name || "Water Tank"}</span>
-                    </div>
-                    
-                    <div class="tank-container">
-                        <svg class="tank-svg" viewBox="0 0 200 195" style="overflow: visible;">
-                            <defs>
-                                <!-- Water gradient — 3 stops for depth -->
-                                <linearGradient id="wg-${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stop-color="${waterColorTop}" stop-opacity="0.9"/>
-                                    <stop offset="45%" stop-color="${waterColorMid}" stop-opacity="0.95"/>
-                                    <stop offset="100%" stop-color="${waterColorBottom}" stop-opacity="1"/>
-                                </linearGradient>
+      <ha-card>
+        <div class="card-content">
+          <div class="header">
+            <svg class="header-icon" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/>
+            </svg>
+            <span>${this.config.name || "Water Tank"}</span>
+          </div>
+          
+          <div class="tank-container">
+            <svg class="tank-svg" viewBox="0 0 200 200" style="overflow: visible;">
+              <defs>
+                <!-- Water body gradient (top to bottom) -->
+                <linearGradient id="wg-${u}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="${wTop}" stop-opacity="0.9"/>
+                  <stop offset="50%" stop-color="${wMid}" stop-opacity="0.95"/>
+                  <stop offset="100%" stop-color="${wBot}" stop-opacity="1"/>
+                </linearGradient>
 
-                                <!-- Specular highlight on water (left side) -->
-                                <linearGradient id="ws-${uid}" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stop-color="white" stop-opacity="0.22"/>
-                                    <stop offset="25%" stop-color="white" stop-opacity="0.06"/>
-                                    <stop offset="100%" stop-color="white" stop-opacity="0"/>
-                                </linearGradient>
+                <!-- Water surface ellipse gradient (lighter, translucent) -->
+                <radialGradient id="wsurf-${u}" cx="40%" cy="40%" r="60%">
+                  <stop offset="0%" stop-color="${wTop}" stop-opacity="0.95"/>
+                  <stop offset="100%" stop-color="${wMid}" stop-opacity="0.85"/>
+                </radialGradient>
 
-                                <!-- Caustic light pattern overlay -->
-                                <radialGradient id="wc-${uid}" cx="35%" cy="30%" r="60%">
-                                    <stop offset="0%" stop-color="white" stop-opacity="0.12"/>
-                                    <stop offset="50%" stop-color="white" stop-opacity="0"/>
-                                    <stop offset="100%" stop-color="white" stop-opacity="0.05"/>
-                                </radialGradient>
+                <!-- Specular highlight on water body (left side shine) -->
+                <linearGradient id="whl-${u}" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="white" stop-opacity="0.18"/>
+                  <stop offset="20%" stop-color="white" stop-opacity="0.05"/>
+                  <stop offset="100%" stop-color="white" stop-opacity="0"/>
+                </linearGradient>
 
-                                <!-- Tank body gradient (subtle 3D) -->
-                                <linearGradient id="tb-${uid}" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" stop-color="var(--primary-text-color)" stop-opacity="0.07"/>
-                                    <stop offset="30%" stop-color="var(--primary-text-color)" stop-opacity="0.02"/>
-                                    <stop offset="70%" stop-color="var(--primary-text-color)" stop-opacity="0.02"/>
-                                    <stop offset="100%" stop-color="var(--primary-text-color)" stop-opacity="0.09"/>
-                                </linearGradient>
+                <!-- Tank body gradient (metallic cylinder) -->
+                <linearGradient id="cyl-${u}" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="var(--primary-text-color)" stop-opacity="0.12"/>
+                  <stop offset="15%" stop-color="var(--primary-text-color)" stop-opacity="0.04"/>
+                  <stop offset="50%" stop-color="var(--primary-text-color)" stop-opacity="0.02"/>
+                  <stop offset="85%" stop-color="var(--primary-text-color)" stop-opacity="0.04"/>
+                  <stop offset="100%" stop-color="var(--primary-text-color)" stop-opacity="0.14"/>
+                </linearGradient>
 
-                                <!-- Pipe metallic gradient (vertical) -->
-                                <linearGradient id="pv-${uid}" x1="0%" y1="0%" x2="100%" y2="0%">
-                                    <stop offset="0%" stop-color="#78909c" stop-opacity="1"/>
-                                    <stop offset="35%" stop-color="#cfd8dc" stop-opacity="1"/>
-                                    <stop offset="65%" stop-color="#90a4ae" stop-opacity="1"/>
-                                    <stop offset="100%" stop-color="#546e7a" stop-opacity="1"/>
-                                </linearGradient>
+                <!-- Pipe gradient -->
+                <linearGradient id="pg-${u}" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#78909c"/>
+                  <stop offset="30%" stop-color="#eceff1"/>
+                  <stop offset="70%" stop-color="#90a4ae"/>
+                  <stop offset="100%" stop-color="#546e7a"/>
+                </linearGradient>
 
-                                <!-- Pipe metallic gradient (horizontal) -->
-                                <linearGradient id="ph-${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stop-color="#78909c" stop-opacity="1"/>
-                                    <stop offset="30%" stop-color="#eceff1" stop-opacity="1"/>
-                                    <stop offset="70%" stop-color="#90a4ae" stop-opacity="1"/>
-                                    <stop offset="100%" stop-color="#546e7a" stop-opacity="1"/>
-                                </linearGradient>
+                <!-- Tank shadow -->
+                <filter id="ts-${u}" x="-15%" y="-10%" width="130%" height="130%">
+                  <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.2)"/>
+                </filter>
 
-                                <!-- Outflow water fill for pipe -->
-                                <linearGradient id="of-${uid}" x1="0%" y1="0%" x2="0%" y2="100%">
-                                    <stop offset="0%" stop-color="${waterColorTop}" stop-opacity="0.7"/>
-                                    <stop offset="100%" stop-color="${waterColorMid}" stop-opacity="0.9"/>
-                                </linearGradient>
+                <!-- Clip: cylinder body (between the two ellipses) -->
+                <clipPath id="cylClip-${u}">
+                  <rect x="${cx - rx}" y="${topY}" width="${rx * 2}" height="${bodyH}"/>
+                </clipPath>
+              </defs>
 
-                                <!-- Tank shadow filter -->
-                                <filter id="ts-${uid}" x="-10%" y="-10%" width="120%" height="130%">
-                                    <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="rgba(0,0,0,0.18)"/>
-                                </filter>
+              <!-- ====== INFLOW PIPE ====== -->
+              <!-- Horizontal -->
+              <rect x="8" y="${pipeInY - 5}" width="${pipeInEndX - 8}" height="10" rx="2" fill="url(#pg-${u})"/>
+              <!-- Vertical -->
+              <rect x="${pipeInEndX - 5}" y="${pipeInY}" width="10" height="${topY - pipeInY + ry}" rx="2" fill="url(#pg-${u})"/>
+              <!-- Elbow -->
+              <circle cx="${pipeInEndX}" cy="${pipeInY}" r="7" fill="url(#pg-${u})" stroke="#546e7a" stroke-width="0.8"/>
+              <circle cx="${pipeInEndX}" cy="${pipeInY}" r="3" fill="#b0bec5"/>
+              <!-- End cap -->
+              <rect x="5" y="${pipeInY - 7}" width="6" height="14" rx="2" fill="#546e7a"/>
 
-                                <!-- Clip path for water inside tank -->
-                                <clipPath id="tc-${uid}">
-                                    <rect x="${tankX + waterInset}" y="${tankY + waterInset}" width="${tankW - waterInset * 2}" height="${tankH - waterInset}" rx="${tankR - 2}"/>
-                                </clipPath>
+              <!-- ====== OUTFLOW PIPE ====== -->
+              <!-- Horizontal from tank -->
+              <rect x="${cx + rx - 3}" y="${pipeOutStartY - 5}" width="${pipeOutEndX - cx - rx + 8}" height="10" rx="2" fill="url(#pg-${u})"/>
+              <!-- Vertical down -->
+              <rect x="${pipeOutEndX - 5}" y="${pipeOutStartY}" width="10" height="${pipeOutBendY - pipeOutStartY}" rx="2" fill="url(#pg-${u})"/>
+              <!-- Elbow -->
+              <circle cx="${pipeOutEndX}" cy="${pipeOutStartY}" r="7" fill="url(#pg-${u})" stroke="#546e7a" stroke-width="0.8"/>
+              <circle cx="${pipeOutEndX}" cy="${pipeOutStartY}" r="3" fill="#b0bec5"/>
+              <!-- Nozzle -->
+              <path d="M${pipeOutEndX - 6} ${pipeOutBendY} L${pipeOutEndX - 3} ${pipeOutBendY + 6} L${pipeOutEndX + 3} ${pipeOutBendY + 6} L${pipeOutEndX + 6} ${pipeOutBendY} Z" fill="#546e7a"/>
 
-                                <!-- Clip for outflow horizontal pipe interior -->
-                                <clipPath id="oh-${uid}">
-                                    <rect x="${pipeOutX1}" y="${pipeOutY - 3}" width="${pipeOutX2 - pipeOutX1}" height="6"/>
-                                </clipPath>
-                                <!-- Clip for outflow vertical pipe interior -->
-                                <clipPath id="ov-${uid}">
-                                    <rect x="${pipeOutX2 - 3}" y="${pipeOutY}" width="6" height="${pipeOutBendY - pipeOutY + 5}"/>
-                                </clipPath>
-                            </defs>
+              <!-- ====== OUTFLOW WATER (when active) ====== -->
+              ${isOutflow ? html`
+              <!-- Water inside horizontal pipe -->
+              <rect x="${cx + rx}" y="${pipeOutStartY - 2.5}" width="${pipeOutEndX - cx - rx}" height="5" rx="2" fill="${wMid}" opacity="0.75"/>
+              <!-- Animated flow marker H -->
+              <rect class="outflow-flow-h" x="${cx + rx}" y="${pipeOutStartY - 1.5}" width="${pipeOutEndX - cx - rx}" height="3" rx="1"
+                fill="url(#pg-${u})" opacity="0"  />
+              <line class="outflow-dash-h"
+                x1="${cx + rx}" y1="${pipeOutStartY}"
+                x2="${pipeOutEndX}" y2="${pipeOutStartY}"
+                stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
 
-                            <!-- ====== INFLOW PIPE ====== -->
-                            <!-- Horizontal segment -->
-                            <rect x="${pipeInX1}" y="${pipeInY - 5}" width="${pipeInX2 - pipeInX1}" height="10" rx="2" fill="url(#ph-${uid})"/>
-                            <!-- Vertical segment -->
-                            <rect x="${pipeInX2 - 5}" y="${pipeInY}" width="10" height="${pipeInBendY - pipeInY + 5}" rx="2" fill="url(#pv-${uid})"/>
-                            <!-- Elbow joint -->
-                            <circle cx="${pipeInX2}" cy="${pipeInY}" r="7" fill="url(#ph-${uid})" stroke="#546e7a" stroke-width="0.8"/>
-                            <circle cx="${pipeInX2}" cy="${pipeInY}" r="3" fill="#90a4ae"/>
-                            <!-- Pipe cap at entry -->
-                            <rect x="${pipeInX1 - 2}" y="${pipeInY - 7}" width="6" height="14" rx="2" fill="#546e7a"/>
+              <!-- Water inside vertical pipe -->
+              <rect x="${pipeOutEndX - 2.5}" y="${pipeOutStartY}" width="5" height="${pipeOutBendY - pipeOutStartY + 3}" rx="2" fill="${wMid}" opacity="0.75"/>
+              <line class="outflow-dash-v"
+                x1="${pipeOutEndX}" y1="${pipeOutStartY}"
+                x2="${pipeOutEndX}" y2="${pipeOutBendY + 3}"
+                stroke="rgba(255,255,255,0.5)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
 
-                            <!-- ====== OUTFLOW PIPE ====== -->
-                            <!-- Horizontal segment -->
-                            <rect x="${pipeOutX1 - 3}" y="${pipeOutY - 5}" width="${pipeOutX2 - pipeOutX1 + 8}" height="10" rx="2" fill="url(#ph-${uid})"/>
-                            <!-- Vertical segment -->
-                            <rect x="${pipeOutX2 - 5}" y="${pipeOutY}" width="10" height="${pipeOutBendY - pipeOutY}" rx="2" fill="url(#pv-${uid})"/>
-                            <!-- Elbow joint -->
-                            <circle cx="${pipeOutX2}" cy="${pipeOutY}" r="7" fill="url(#ph-${uid})" stroke="#546e7a" stroke-width="0.8"/>
-                            <circle cx="${pipeOutX2}" cy="${pipeOutY}" r="3" fill="#90a4ae"/>
-                            <!-- Nozzle at bottom -->
-                            <path d="M${pipeOutX2 - 6} ${pipeOutBendY} L${pipeOutX2 - 4} ${pipeOutBendY + 5} L${pipeOutX2 + 4} ${pipeOutBendY + 5} L${pipeOutX2 + 6} ${pipeOutBendY} Z" fill="#546e7a"/>
+              <!-- Dripping water from nozzle -->
+              <circle class="drip d1" cx="${pipeOutEndX}" cy="${pipeOutBendY + 10}" r="2.5" fill="${wTop}" opacity="0.8"/>
+              <circle class="drip d2" cx="${pipeOutEndX}" cy="${pipeOutBendY + 20}" r="2" fill="${wMid}" opacity="0.6"/>
+              <circle class="drip d3" cx="${pipeOutEndX}" cy="${pipeOutBendY + 28}" r="1.5" fill="${wMid}" opacity="0.4"/>
 
-                            <!-- ====== OUTFLOW WATER INSIDE PIPES (visible when active) ====== -->
-                            ${isOutflow ? html`
-                            <!-- Water filling the horizontal pipe -->
-                            <g clip-path="url(#oh-${uid})">
-                                <rect class="outflow-water-h" x="${pipeOutX1}" y="${pipeOutY - 3}" width="${pipeOutX2 - pipeOutX1}" height="6" fill="url(#of-${uid})"/>
-                                <!-- Animated flow lines inside horizontal pipe -->
-                                <line class="pipe-flow-h" x1="${pipeOutX1}" y1="${pipeOutY}" x2="${pipeOutX2}" y2="${pipeOutY}"
-                                    stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-dasharray="8 12" stroke-linecap="round"/>
-                            </g>
-                            <!-- Water filling the vertical pipe -->
-                            <g clip-path="url(#ov-${uid})">
-                                <rect x="${pipeOutX2 - 3}" y="${pipeOutY}" width="6" height="${pipeOutBendY - pipeOutY + 5}" fill="url(#of-${uid})"/>
-                                <!-- Animated flow lines inside vertical pipe -->
-                                <line class="pipe-flow-v" x1="${pipeOutX2}" y1="${pipeOutY}" x2="${pipeOutX2}" y2="${pipeOutBendY + 5}"
-                                    stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-dasharray="8 12" stroke-linecap="round"/>
-                            </g>
-                            <!-- Drips from nozzle -->
-                            <circle class="drip d1" cx="${pipeOutX2}" cy="${pipeOutBendY + 8}" r="2.5" fill="${waterColorTop}" opacity="0.8"/>
-                            <circle class="drip d2" cx="${pipeOutX2}" cy="${pipeOutBendY + 18}" r="2" fill="${waterColorMid}" opacity="0.6"/>
-                            <circle class="drip d3" cx="${pipeOutX2}" cy="${pipeOutBendY + 26}" r="1.5" fill="${waterColorMid}" opacity="0.4"/>
-                            ` : ""}
+              <!-- Small puddle at bottom -->
+              <ellipse cx="${pipeOutEndX}" cy="${pipeOutBendY + 38}" rx="8" ry="2" fill="${wMid}" opacity="0.25"/>
+              ` : ""}
 
-                            <!-- ====== TANK BODY ====== -->
-                            <g filter="url(#ts-${uid})">
-                                <!-- Tank background -->
-                                <rect x="${tankX}" y="${tankY}" width="${tankW}" height="${tankH}" rx="${tankR}" fill="url(#tb-${uid})"/>
+              <!-- ====== 3D CYLINDER TANK ====== -->
+              <g filter="url(#ts-${u})">
+                <!-- Back half of top ellipse (behind the water) -->
+                <path d="M${cx - rx} ${topY} A${rx} ${ry} 0 0 1 ${cx + rx} ${topY}" fill="var(--primary-text-color)" fill-opacity="0.06" stroke="var(--primary-text-color)" stroke-width="1.5" stroke-opacity="0.4"/>
 
-                                <!-- Water clipped inside tank -->
-                                <g clip-path="url(#tc-${uid})">
-                                    <!-- Main water body -->
-                                    <rect x="${tankX + waterInset}" y="${waterTop}" width="${tankW - waterInset * 2}" height="${waterHeight + waterInset}" fill="url(#wg-${uid})"/>
+                <!-- Cylinder body -->
+                <g clip-path="url(#cylClip-${u})">
+                  <!-- Body fill -->
+                  <rect x="${cx - rx}" y="${topY}" width="${rx * 2}" height="${bodyH}" fill="url(#cyl-${u})"/>
 
-                                    <!-- Specular highlight overlay -->
-                                    <rect x="${tankX + waterInset}" y="${waterTop}" width="${(tankW - waterInset * 2) * 0.5}" height="${waterHeight + waterInset}" fill="url(#ws-${uid})"/>
+                  <!-- Left edge highlight -->
+                  <rect x="${cx - rx}" y="${topY}" width="6" height="${bodyH}" fill="white" fill-opacity="0.06"/>
 
-                                    <!-- Caustic light pattern -->
-                                    <rect x="${tankX + waterInset}" y="${waterTop}" width="${tankW - waterInset * 2}" height="${waterHeight + waterInset}" fill="url(#wc-${uid})"/>
+                  <!-- ====== WATER BODY ====== -->
+                  ${wp > 0 ? html`
+                  <!-- Main water fill rectangle -->
+                  <rect x="${cx - rx + 2}" y="${waterSurfY}" width="${rx * 2 - 4}" height="${botY - waterSurfY}" fill="url(#wg-${u})"/>
 
-                                    <!-- Animated waves on surface -->
-                                    ${waterPercent > 2 ? html`
-                                    <path class="wave wave1" d="
-                                        M ${waveLeft - 5} ${waveY}
-                                        C ${waveLeft + waveW * 0.1} ${waveY - 5}, ${waveLeft + waveW * 0.2} ${waveY - 5}, ${waveLeft + waveW * 0.3} ${waveY}
-                                        C ${waveLeft + waveW * 0.4} ${waveY + 5}, ${waveLeft + waveW * 0.5} ${waveY + 5}, ${waveLeft + waveW * 0.6} ${waveY}
-                                        C ${waveLeft + waveW * 0.7} ${waveY - 5}, ${waveLeft + waveW * 0.8} ${waveY - 5}, ${waveLeft + waveW * 0.9} ${waveY}
-                                        C ${waveLeft + waveW * 0.95} ${waveY + 3}, ${waveRight + 2} ${waveY + 2}, ${waveRight + 5} ${waveY}
-                                        L ${waveRight + 5} ${waveY + 10}
-                                        L ${waveLeft - 5} ${waveY + 10} Z
-                                    " fill="${waterColorTop}" opacity="0.55"/>
-                                    <path class="wave wave2" d="
-                                        M ${waveLeft - 5} ${waveY + 2}
-                                        C ${waveLeft + waveW * 0.15} ${waveY + 6}, ${waveLeft + waveW * 0.3} ${waveY + 6}, ${waveLeft + waveW * 0.45} ${waveY + 2}
-                                        C ${waveLeft + waveW * 0.55} ${waveY - 2}, ${waveLeft + waveW * 0.65} ${waveY - 2}, ${waveLeft + waveW * 0.75} ${waveY + 2}
-                                        C ${waveLeft + waveW * 0.85} ${waveY + 5}, ${waveRight} ${waveY + 3}, ${waveRight + 5} ${waveY + 2}
-                                        L ${waveRight + 5} ${waveY + 10}
-                                        L ${waveLeft - 5} ${waveY + 10} Z
-                                    " fill="${waterColorTop}" opacity="0.3"/>
-                                    ` : ""}
+                  <!-- Specular highlight on water -->
+                  <rect x="${cx - rx + 2}" y="${waterSurfY}" width="${rx * 2 - 4}" height="${botY - waterSurfY}" fill="url(#whl-${u})"/>
 
-                                    <!-- Bubbles -->
-                                    ${waterPercent > 5 ? html`
-                                    <circle class="bubble b1" cx="${tankX + 22}" cy="${tankY + tankH - 12}" r="2" fill="white" opacity="0.35"/>
-                                    <circle class="bubble b2" cx="${tankX + 52}" cy="${tankY + tankH - 8}" r="1.5" fill="white" opacity="0.3"/>
-                                    <circle class="bubble b3" cx="${tankX + 78}" cy="${tankY + tankH - 18}" r="2.5" fill="white" opacity="0.25"/>
-                                    <circle class="bubble b4" cx="${tankX + 38}" cy="${tankY + tankH - 6}" r="1.8" fill="white" opacity="0.3"/>
-                                    <circle class="bubble b5" cx="${tankX + 65}" cy="${tankY + tankH - 25}" r="1.2" fill="white" opacity="0.2"/>
-                                    ` : ""}
-                                </g>
+                  <!-- Subtle caustic/ripple light patches -->
+                  <ellipse cx="${cx - 12}" cy="${waterSurfY + (botY - waterSurfY) * 0.35}" rx="18" ry="10" fill="white" fill-opacity="0.06"/>
+                  <ellipse cx="${cx + 18}" cy="${waterSurfY + (botY - waterSurfY) * 0.65}" rx="12" ry="8" fill="white" fill-opacity="0.04"/>
+                  ` : ""}
+                </g>
 
-                                <!-- Tank stroke (border) -->
-                                <rect x="${tankX}" y="${tankY}" width="${tankW}" height="${tankH}" rx="${tankR}" fill="none" stroke="var(--primary-text-color)" stroke-width="2" stroke-opacity="0.5"/>
+                <!-- Left wall -->
+                <line x1="${cx - rx}" y1="${topY}" x2="${cx - rx}" y2="${botY}" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.45"/>
+                <!-- Right wall -->
+                <line x1="${cx + rx}" y1="${topY}" x2="${cx + rx}" y2="${botY}" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.45"/>
 
-                                <!-- Tank rim highlight -->
-                                <line x1="${tankX + tankR}" y1="${tankY + 1}" x2="${tankX + tankW - tankR}" y2="${tankY + 1}" stroke="white" stroke-width="1" stroke-opacity="0.25" stroke-linecap="round"/>
-                            </g>
+                <!-- Bottom ellipse (front half visible) -->
+                <path d="M${cx - rx} ${botY} A${rx} ${ry} 0 0 0 ${cx + rx} ${botY}" fill="var(--primary-text-color)" fill-opacity="0.08" stroke="var(--primary-text-color)" stroke-width="1.5" stroke-opacity="0.4"/>
 
-                            <!-- ====== INFLOW ANIMATION ====== -->
-                            ${inflowRate > 0 ? html`
-                            <!-- Flowing stream from pipe into tank -->
-                            <line class="flow-stream inflow-stream"
-                                x1="${pipeInX2}" y1="${pipeInBendY + 3}"
-                                x2="${pipeInX2}" y2="${Math.min(waterTop, tankY + tankH - 5)}"
-                                stroke="${waterColorTop}" stroke-width="5" stroke-linecap="round"
-                                stroke-dasharray="6 8" opacity="0.85"/>
+                <!-- ====== WATER SURFACE ELLIPSE ====== -->
+                ${wp > 1 ? html`
+                <ellipse class="water-surface" cx="${cx}" cy="${waterSurfY}" rx="${rx - 2}" ry="${ry - 1}" fill="url(#wsurf-${u})" stroke="${wTop}" stroke-width="1" stroke-opacity="0.5"/>
+                <!-- Highlight arc on water surface -->
+                <ellipse cx="${cx - 8}" cy="${waterSurfY - 1}" rx="${rx * 0.5}" ry="${ry * 0.35}" fill="white" fill-opacity="0.12"/>
+                ` : ""}
 
-                            <!-- Splash droplets at water surface -->
-                            <circle class="splash s1" cx="${pipeInX2 - 7}" cy="${waterTop}" r="2" fill="${waterColorTop}" opacity="0.7"/>
-                            <circle class="splash s2" cx="${pipeInX2 + 6}" cy="${waterTop - 2}" r="1.5" fill="${waterColorTop}" opacity="0.6"/>
-                            <circle class="splash s3" cx="${pipeInX2 - 4}" cy="${waterTop - 4}" r="1.2" fill="${waterColorTop}" opacity="0.5"/>
-                            <circle class="splash s4" cx="${pipeInX2 + 9}" cy="${waterTop - 1}" r="1.8" fill="${waterColorTop}" opacity="0.5"/>
-                            ` : ""}
+                <!-- Bottom ellipse water fill (front arc) -->
+                ${wp > 0 ? html`
+                <path d="M${cx - rx + 2} ${botY} A${rx - 2} ${ry - 1} 0 0 0 ${cx + rx - 2} ${botY}" fill="${wBot}" fill-opacity="0.8"/>
+                ` : ""}
 
-                            <!-- ====== LEVEL MARKERS ====== -->
-                            ${[25, 50, 75].map(lvl => html`
-                                <line x1="${tankX + 3}" y1="${tankY + tankH * (1 - lvl / 100)}" x2="${tankX + 12}" y2="${tankY + tankH * (1 - lvl / 100)}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>
-                            `)}
-                        </svg>
+                <!-- Front half of top ellipse (rim) -->
+                <path d="M${cx - rx} ${topY} A${rx} ${ry} 0 0 0 ${cx + rx} ${topY}" fill="none" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.5"/>
 
-                        <!-- OVERLAYS -->
-                        <div class="tank-overlay" style="top: ${40 + 120 * (1 - waterPercent / 100) / 2 + 120 * waterPercent / 100 / 2}px;">
-                            <div class="percentage ${isLowWarning ? 'low' : ''}">${percentage.toFixed(0)}<span class="pct">%</span></div>
-                            ${displayTemp !== null ? html`
-                                <div class="temperature ${isTempWarning ? 'warn' : ''}">${displayTemp.toFixed(1)}${displayTempUnit}</div>
-                            ` : ""}
-                        </div>
+                <!-- Rim highlight -->
+                <path d="M${cx - rx + 10} ${topY + ry * 0.6} A${rx - 10} ${ry * 0.4} 0 0 0 ${cx + rx - 10} ${topY + ry * 0.6}" fill="none" stroke="white" stroke-width="0.8" stroke-opacity="0.15"/>
 
-                        <!-- Warnings -->
-                        ${isTempWarning ? html`
-                            <div class="warning-icon temp-warning">
-                                <svg viewBox="0 0 40 40" width="32" height="32">
-                                    <path d="M20 5 L5 35 L35 35 Z" fill="#ef4444" stroke="white" stroke-width="2" rx="2"/>
-                                    <text x="20" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="white">!</text>
-                                </svg>
-                            </div>
-                        ` : ""}
+                <!-- Bubbles inside water -->
+                ${wp > 8 ? html`
+                <circle class="bubble b1" cx="${cx - 18}" cy="${botY - 15}" r="2" fill="white" opacity="0.3"/>
+                <circle class="bubble b2" cx="${cx + 10}" cy="${botY - 10}" r="1.5" fill="white" opacity="0.25"/>
+                <circle class="bubble b3" cx="${cx + 25}" cy="${botY - 22}" r="2.2" fill="white" opacity="0.2"/>
+                <circle class="bubble b4" cx="${cx - 5}" cy="${botY - 8}" r="1.8" fill="white" opacity="0.28"/>
+                <circle class="bubble b5" cx="${cx + 15}" cy="${botY - 30}" r="1.2" fill="white" opacity="0.18"/>
+                ` : ""}
+              </g>
 
-                        ${isLowWarning ? html`
-                            <div class="warning-icon low-warning">
-                                <svg viewBox="0 0 40 40" width="32" height="32">
-                                    <path d="M20 8 Q 30 20 30 26 A 10 10 0 1 1 10 26 Q 10 20 20 8 Z" fill="#3b82f6" stroke="white" stroke-width="1.5"/>
-                                    <line x1="8" y1="35" x2="32" y2="10" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>
-                                </svg>
-                            </div>
-                        ` : ""}
-                    </div>
+              <!-- ====== INFLOW ANIMATION ====== -->
+              ${inflowRate > 0 ? html`
+              <line class="flow-stream"
+                x1="${pipeInEndX}" y1="${topY + ry + 2}"
+                x2="${pipeInEndX}" y2="${Math.min(waterSurfY, botY - 5)}"
+                stroke="${wTop}" stroke-width="5" stroke-linecap="round"
+                stroke-dasharray="6 8" opacity="0.85"/>
+              <!-- Splash -->
+              <circle class="splash s1" cx="${pipeInEndX - 7}" cy="${waterSurfY}" r="2" fill="${wTop}" opacity="0.6"/>
+              <circle class="splash s2" cx="${pipeInEndX + 6}" cy="${waterSurfY - 2}" r="1.8" fill="${wTop}" opacity="0.5"/>
+              <circle class="splash s3" cx="${pipeInEndX - 3}" cy="${waterSurfY - 5}" r="1.3" fill="${wTop}" opacity="0.4"/>
+              <circle class="splash s4" cx="${pipeInEndX + 10}" cy="${waterSurfY - 1}" r="1.5" fill="${wTop}" opacity="0.5"/>
+              ` : ""}
 
-                    <div class="info-bar">
-                        <div class="stat">
-                            <div class="stat-icon">
-                                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
-                            </div>
-                            <div class="stat-data">
-                                <span class="label">Today's Inflow</span>
-                                <span class="value">${displayRainTotal.toFixed(1)} ${displayRainUnit}</span>
-                            </div>
-                        </div>
-                        ${inflowRate > 0 ? html`
-                        <div class="stat">
-                            <div class="stat-icon active">
-                                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
-                            </div>
-                            <div class="stat-data">
-                                <span class="label">Rain Rate</span>
-                                <span class="value">${inflowRate.toFixed(1)} mm/h</span>
-                            </div>
-                        </div>
-                        ` : ""}
-                    </div>
-                </div>
-            </ha-card>
-        `;
+              <!-- ====== LEVEL MARKERS ====== -->
+              ${[25, 50, 75].map(lvl => {
+                const markerY = botY - (bodyH * lvl / 100);
+                return html`
+                  <line x1="${cx - rx + 3}" y1="${markerY}" x2="${cx - rx + 11}" y2="${markerY}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>
+                `;
+              })}
+            </svg>
+
+            <!-- OVERLAYS -->
+            <div class="tank-overlay" style="top: ${((topY + (botY - (bodyH * wp / 100))) / 2 + (botY) / 2) / 2 / 200 * 100}%;">
+              <div class="percentage ${isLowWarning ? 'low' : ''}">${percentage.toFixed(0)}<span class="pct">%</span></div>
+              ${displayTemp !== null ? html`
+                <div class="temperature ${isTempWarning ? 'warn' : ''}">${displayTemp.toFixed(1)}${displayTempUnit}</div>
+              ` : ""}
+            </div>
+
+            <!-- Warnings -->
+            ${isTempWarning ? html`
+              <div class="warning-icon temp-warning">
+                <svg viewBox="0 0 40 40" width="30" height="30">
+                  <path d="M20 5 L5 35 L35 35 Z" fill="#ef4444" stroke="white" stroke-width="2"/>
+                  <text x="20" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="white">!</text>
+                </svg>
+              </div>
+            ` : ""}
+
+            ${isLowWarning ? html`
+              <div class="warning-icon low-warning">
+                <svg viewBox="0 0 40 40" width="30" height="30">
+                  <path d="M20 8 Q 30 20 30 26 A 10 10 0 1 1 10 26 Q 10 20 20 8 Z" fill="#3b82f6" stroke="white" stroke-width="1.5"/>
+                  <line x1="8" y1="35" x2="32" y2="10" stroke="#ef4444" stroke-width="3.5" stroke-linecap="round"/>
+                </svg>
+              </div>
+            ` : ""}
+          </div>
+
+          <div class="info-bar">
+            <div class="stat">
+              <div class="stat-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
+              </div>
+              <div class="stat-data">
+                <span class="label">Today's Inflow</span>
+                <span class="value">${displayRainTotal.toFixed(1)} ${displayRainUnit}</span>
+              </div>
+            </div>
+            ${inflowRate > 0 ? html`
+            <div class="stat">
+              <div class="stat-icon active">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
+              </div>
+              <div class="stat-data">
+                <span class="label">Rain Rate</span>
+                <span class="value">${inflowRate.toFixed(1)} mm/h</span>
+              </div>
+            </div>
+            ` : ""}
+          </div>
+        </div>
+      </ha-card>
+    `;
   }
 
   static getConfigurationElement() {
@@ -441,250 +415,244 @@ class WaterTankCard extends LitElement {
 
   static get styles() {
     return css`
-            ha-card {
-                padding: 16px;
-                background: var(--ha-card-background, var(--card-background-color, rgba(255,255,255,0.05)));
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 16px;
-            }
-            .card-content {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-            .header {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-                font-size: 1.15em;
-                font-weight: 600;
-                letter-spacing: 0.02em;
-                color: var(--primary-text-color);
-                margin-bottom: 4px;
-            }
-            .header-icon {
-                color: var(--primary-color, #0ea5e9);
-                flex-shrink: 0;
-            }
-            
-            .tank-container {
-                position: relative;
-                width: 220px;
-                height: 200px;
-                margin-top: 8px;
-                display: flex;
-                justify-content: center;
-            }
-            
-            .tank-svg {
-                width: 100%;
-                height: 100%;
-            }
+      ha-card {
+        padding: 16px;
+        background: var(--ha-card-background, var(--card-background-color, rgba(255,255,255,0.05)));
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+      }
+      .card-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 1.15em;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: var(--primary-text-color);
+        margin-bottom: 4px;
+      }
+      .header-icon {
+        color: var(--primary-color, #0ea5e9);
+        flex-shrink: 0;
+      }
+      
+      .tank-container {
+        position: relative;
+        width: 240px;
+        height: 210px;
+        margin-top: 8px;
+        display: flex;
+        justify-content: center;
+      }
+      
+      .tank-svg {
+        width: 100%;
+        height: 100%;
+      }
 
-            /* ====== WAVE ANIMATION ====== */
-            .wave {
-                animation: waveShift 3s ease-in-out infinite alternate;
-                transform-origin: center;
-            }
-            .wave.wave2 {
-                animation: waveShift2 2.5s ease-in-out infinite alternate;
-            }
+      /* ====== WATER SURFACE WOBBLE ====== */
+      .water-surface {
+        animation: wobble 3s ease-in-out infinite alternate;
+        transform-origin: center;
+      }
 
-            @keyframes waveShift {
-                0%   { transform: translateX(-4px); }
-                100% { transform: translateX(4px); }
-            }
-            @keyframes waveShift2 {
-                0%   { transform: translateX(3px); }
-                100% { transform: translateX(-3px); }
-            }
+      @keyframes wobble {
+        0%   { transform: scaleX(0.97); }
+        50%  { transform: scaleX(1.02); }
+        100% { transform: scaleX(0.97); }
+      }
 
-            /* ====== BUBBLE ANIMATION ====== */
-            .bubble {
-                animation: rise 4s ease-in infinite;
-            }
-            .bubble.b2 { animation-delay: 1s; animation-duration: 3.5s; }
-            .bubble.b3 { animation-delay: 2.2s; animation-duration: 5s; }
-            .bubble.b4 { animation-delay: 0.5s; animation-duration: 3s; }
-            .bubble.b5 { animation-delay: 3s; animation-duration: 4.5s; }
+      /* ====== BUBBLE ANIMATION ====== */
+      .bubble {
+        animation: rise 4s ease-in infinite;
+      }
+      .bubble.b2 { animation-delay: 1s; animation-duration: 3.5s; }
+      .bubble.b3 { animation-delay: 2.2s; animation-duration: 5s; }
+      .bubble.b4 { animation-delay: 0.5s; animation-duration: 3s; }
+      .bubble.b5 { animation-delay: 3s; animation-duration: 4.5s; }
 
-            @keyframes rise {
-                0%   { transform: translateY(0); opacity: 0.3; }
-                50%  { opacity: 0.15; }
-                100% { transform: translateY(-70px); opacity: 0; }
-            }
+      @keyframes rise {
+        0%   { transform: translateY(0); opacity: 0.3; }
+        50%  { opacity: 0.15; }
+        100% { transform: translateY(-70px); opacity: 0; }
+      }
 
-            /* ====== INFLOW STREAM ANIMATION ====== */
-            .flow-stream {
-                animation: flowDash 0.7s linear infinite;
-            }
+      /* ====== INFLOW STREAM ====== */
+      .flow-stream {
+        animation: flowDash 0.7s linear infinite;
+      }
 
-            @keyframes flowDash {
-                0%   { stroke-dashoffset: 0; }
-                100% { stroke-dashoffset: -14; }
-            }
+      @keyframes flowDash {
+        0%   { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -14; }
+      }
 
-            /* ====== OUTFLOW PIPE WATER FLOW ====== */
-            .pipe-flow-h {
-                animation: pipeFlowH 0.6s linear infinite;
-            }
-            .pipe-flow-v {
-                animation: pipeFlowV 0.6s linear infinite;
-            }
+      /* ====== OUTFLOW WATER DASHES ====== */
+      .outflow-dash-h {
+        animation: outflowH 0.5s linear infinite;
+      }
+      .outflow-dash-v {
+        animation: outflowV 0.5s linear infinite;
+      }
 
-            @keyframes pipeFlowH {
-                0%   { stroke-dashoffset: 0; }
-                100% { stroke-dashoffset: -20; }
-            }
-            @keyframes pipeFlowV {
-                0%   { stroke-dashoffset: 0; }
-                100% { stroke-dashoffset: -20; }
-            }
+      @keyframes outflowH {
+        0%   { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -10; }
+      }
+      @keyframes outflowV {
+        0%   { stroke-dashoffset: 0; }
+        100% { stroke-dashoffset: -10; }
+      }
 
-            /* ====== SPLASH ANIMATION ====== */
-            .splash {
-                animation: splashOut 1.2s ease-out infinite;
-            }
-            .splash.s2 { animation-delay: 0.3s; }
-            .splash.s3 { animation-delay: 0.6s; }
-            .splash.s4 { animation-delay: 0.15s; }
+      /* ====== SPLASH ====== */
+      .splash {
+        animation: splashOut 1.2s ease-out infinite;
+      }
+      .splash.s2 { animation-delay: 0.3s; }
+      .splash.s3 { animation-delay: 0.6s; }
+      .splash.s4 { animation-delay: 0.15s; }
 
-            @keyframes splashOut {
-                0%   { transform: translate(0, 0) scale(1); opacity: 0.7; }
-                50%  { transform: translate(0, -8px) scale(1.4); opacity: 0.3; }
-                100% { transform: translate(0, -3px) scale(0.4); opacity: 0; }
-            }
+      @keyframes splashOut {
+        0%   { transform: translate(0, 0) scale(1); opacity: 0.7; }
+        50%  { transform: translate(0, -8px) scale(1.3); opacity: 0.3; }
+        100% { transform: translate(0, -3px) scale(0.4); opacity: 0; }
+      }
 
-            /* ====== DRIP ANIMATION ====== */
-            .drip {
-                animation: dripFall 1.4s ease-in infinite;
-            }
-            .drip.d2 { animation-delay: 0.5s; }
-            .drip.d3 { animation-delay: 1s; }
+      /* ====== DRIP ANIMATION ====== */
+      .drip {
+        animation: dripFall 1.4s ease-in infinite;
+      }
+      .drip.d2 { animation-delay: 0.5s; }
+      .drip.d3 { animation-delay: 1s; }
 
-            @keyframes dripFall {
-                0%   { transform: translateY(0); opacity: 0.8; }
-                50%  { opacity: 0.5; }
-                100% { transform: translateY(22px); opacity: 0; }
-            }
+      @keyframes dripFall {
+        0%   { transform: translateY(0); opacity: 0.8; }
+        50%  { opacity: 0.5; }
+        100% { transform: translateY(20px); opacity: 0; }
+      }
 
-            /* ====== OVERLAY TEXT ====== */
-            .tank-overlay {
-                position: absolute;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                text-align: center;
-                z-index: 10;
-                color: white;
-                text-shadow:
-                    0 1px 4px rgba(0,0,0,0.8),
-                    0 0 12px rgba(0,0,0,0.3);
-                pointer-events: none;
-                transition: top 1s ease;
-            }
-            
-            .percentage {
-                font-size: 2em;
-                font-weight: 700;
-                line-height: 1;
-                letter-spacing: -0.02em;
-            }
-            .percentage .pct {
-                font-size: 0.5em;
-                font-weight: 500;
-                opacity: 0.85;
-                vertical-align: super;
-            }
-            .percentage.low {
-                color: #fbbf24;
-            }
-            
-            .temperature {
-                font-size: 0.9em;
-                margin-top: 4px;
-                font-weight: 500;
-                opacity: 0.9;
-            }
-            .temperature.warn {
-                color: #fbbf24;
-            }
-            
-            /* ====== WARNING ICONS ====== */
-            .warning-icon {
-                position: absolute;
-                z-index: 20;
-                animation: pulse 1.5s ease-in-out infinite;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-            }
-            
-            .temp-warning {
-                top: 5px;
-                left: 50%;
-                transform: translateX(-50%);
-            }
-            
-            .low-warning {
-                bottom: 40px;
-                left: 50%;
-                transform: translateX(-50%);
-            }
-            
-            @keyframes pulse {
-                0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
-                50% { opacity: 0.5; transform: translateX(-50%) scale(0.9); }
-            }
-            
-            /* ====== INFO BAR ====== */
-            .info-bar {
-                display: flex;
-                justify-content: center;
-                gap: 20px;
-                width: 100%;
-                margin-top: 12px;
-                padding-top: 12px;
-                border-top: 1px solid rgba(128,128,128,0.15);
-            }
-            .stat {
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-            .stat-icon {
-                color: var(--secondary-text-color);
-                opacity: 0.5;
-                display: flex;
-                align-items: center;
-            }
-            .stat-icon.active {
-                color: #3b82f6;
-                opacity: 1;
-                animation: pulse-icon 2s ease-in-out infinite;
-            }
+      /* ====== OVERLAY TEXT ====== */
+      .tank-overlay {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        z-index: 10;
+        color: white;
+        text-shadow:
+          0 1px 4px rgba(0,0,0,0.8),
+          0 0 12px rgba(0,0,0,0.3);
+        pointer-events: none;
+        transition: top 1s ease;
+      }
+      
+      .percentage {
+        font-size: 2em;
+        font-weight: 700;
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      .percentage .pct {
+        font-size: 0.5em;
+        font-weight: 500;
+        opacity: 0.85;
+        vertical-align: super;
+      }
+      .percentage.low {
+        color: #fbbf24;
+      }
+      
+      .temperature {
+        font-size: 0.9em;
+        margin-top: 4px;
+        font-weight: 500;
+        opacity: 0.9;
+      }
+      .temperature.warn {
+        color: #fbbf24;
+      }
+      
+      /* ====== WARNINGS ====== */
+      .warning-icon {
+        position: absolute;
+        z-index: 20;
+        animation: pulse 1.5s ease-in-out infinite;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+      }
+      
+      .temp-warning {
+        top: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      
+      .low-warning {
+        bottom: 45px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+        50% { opacity: 0.5; transform: translateX(-50%) scale(0.9); }
+      }
+      
+      /* ====== INFO BAR ====== */
+      .info-bar {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        width: 100%;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(128,128,128,0.15);
+      }
+      .stat {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .stat-icon {
+        color: var(--secondary-text-color);
+        opacity: 0.5;
+        display: flex;
+        align-items: center;
+      }
+      .stat-icon.active {
+        color: #3b82f6;
+        opacity: 1;
+        animation: pulse-icon 2s ease-in-out infinite;
+      }
 
-            @keyframes pulse-icon {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.4; }
-            }
+      @keyframes pulse-icon {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
 
-            .stat-data {
-                display: flex;
-                flex-direction: column;
-            }
-            .label {
-                font-size: 0.7em;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                color: var(--secondary-text-color);
-                opacity: 0.7;
-            }
-            .value {
-                font-size: 1.05em;
-                font-weight: 600;
-                color: var(--primary-text-color);
-            }
-        `;
+      .stat-data {
+        display: flex;
+        flex-direction: column;
+      }
+      .label {
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--secondary-text-color);
+        opacity: 0.7;
+      }
+      .value {
+        font-size: 1.05em;
+        font-weight: 600;
+        color: var(--primary-text-color);
+      }
+    `;
   }
 }
 
