@@ -2,11 +2,10 @@ import {
   LitElement,
   html,
   css,
-  svg,
 } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 
-// Version 23.0 - SVG namespace fix
-console.info("%c WATER-TANK-CARD %c v23.0.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
+// Version 23.1 - Static SVG, display toggle
+console.info("%c WATER-TANK-CARD %c v23.1.0 ", "color: white; background: #0ea5e9; font-weight: 700;", "color: #0ea5e9; background: white; font-weight: 700;");
 
 class WaterTankCard extends LitElement {
   static get properties() {
@@ -132,7 +131,7 @@ class WaterTankCard extends LitElement {
     const wp = percentage;
     const u = this._uid;
 
-    /* ============ CYLINDER GEOMETRY ============ */
+    /* ============ GEOMETRY ============ */
     const cx = 100;
     const rx = 46;
     const ry = 13;
@@ -143,18 +142,31 @@ class WaterTankCard extends LitElement {
     const waterSurfY = botY - (bodyH * wp / 100);
     const waterH = botY - waterSurfY;
 
-    // Pipe geometry
     const pipeInEndX = cx;
     const pipeInY = topY - 20;
     const pipeOutStartY = botY - 15;
     const pipeOutEndX = cx + rx + 32;
     const pipeOutBendY = botY + 20;
 
-    // Water body path with curved bottom (sweep=1 = arc goes downward)
     const wL = cx - rx + 3;
     const wR = cx + rx - 3;
     const wRx = rx - 3;
     const wRy = ry - 1;
+
+    // Display toggles - "inline" or "none"
+    const showWater = wp > 0 ? "inline" : "none";
+    const showSurface = wp > 1 ? "inline" : "none";
+    const showInflow = inflowRate > 0 ? "inline" : "none";
+    const showOutflow = isOutflow ? "inline" : "none";
+    const showBubbles = wp > 8 ? "inline" : "none";
+    const showTopBand = waterH > 15 ? "inline" : "none";
+    const showCaustics = waterH > 25 ? "inline" : "none";
+
+    // Water body path with curved bottom
+    const waterBodyPath = `M${wL} ${waterSurfY} L${wL} ${botY} A${wRx} ${wRy} 0 0 1 ${wR} ${botY} L${wR} ${waterSurfY} Z`;
+    const waterBotArc = `M${wL} ${botY} A${wRx} ${wRy} 0 0 0 ${wR} ${botY}`;
+    const inflowEndY = Math.min(waterSurfY - 2, botY - 5);
+    const topBandH = Math.min(waterH * 0.35, 30);
 
     return html`
       <ha-card>
@@ -201,16 +213,16 @@ class WaterTankCard extends LitElement {
               <circle cx="${pipeOutEndX}" cy="${pipeOutStartY}" r="3" fill="#b0bec5"/>
               <path d="M${pipeOutEndX - 6} ${pipeOutBendY} L${pipeOutEndX - 3} ${pipeOutBendY + 5} L${pipeOutEndX + 3} ${pipeOutBendY + 5} L${pipeOutEndX + 6} ${pipeOutBendY} Z" fill="#546e7a"/>
 
-              <!-- OUTFLOW WATER — uses svg`` not html`` -->
-              ${isOutflow ? svg`
-              <rect x="${cx + rx}" y="${pipeOutStartY - 2}" width="${pipeOutEndX - cx - rx}" height="4" fill="${wMid}" opacity="0.85"/>
-              <line class="outflow-dash-h" x1="${cx + rx}" y1="${pipeOutStartY}" x2="${pipeOutEndX}" y2="${pipeOutStartY}" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
-              <rect x="${pipeOutEndX - 2}" y="${pipeOutStartY}" width="4" height="${pipeOutBendY - pipeOutStartY + 3}" fill="${wMid}" opacity="0.85"/>
-              <line class="outflow-dash-v" x1="${pipeOutEndX}" y1="${pipeOutStartY}" x2="${pipeOutEndX}" y2="${pipeOutBendY + 3}" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
-              <circle class="drip d1" cx="${pipeOutEndX}" cy="${pipeOutBendY + 9}" r="2.5" fill="${wTop}" opacity="0.8"/>
-              <circle class="drip d2" cx="${pipeOutEndX}" cy="${pipeOutBendY + 18}" r="2" fill="${wMid}" opacity="0.6"/>
-              <circle class="drip d3" cx="${pipeOutEndX}" cy="${pipeOutBendY + 26}" r="1.5" fill="${wMid}" opacity="0.4"/>
-              ` : ""}
+              <!-- OUTFLOW WATER (always in DOM, toggled via display) -->
+              <g display="${showOutflow}">
+                <rect x="${cx + rx}" y="${pipeOutStartY - 2}" width="${pipeOutEndX - cx - rx}" height="4" fill="${wMid}" opacity="0.85"/>
+                <line class="outflow-dash-h" x1="${cx + rx}" y1="${pipeOutStartY}" x2="${pipeOutEndX}" y2="${pipeOutStartY}" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
+                <rect x="${pipeOutEndX - 2}" y="${pipeOutStartY}" width="4" height="${pipeOutBendY - pipeOutStartY + 3}" fill="${wMid}" opacity="0.85"/>
+                <line class="outflow-dash-v" x1="${pipeOutEndX}" y1="${pipeOutStartY}" x2="${pipeOutEndX}" y2="${pipeOutBendY + 3}" stroke="rgba(255,255,255,0.45)" stroke-width="2" stroke-dasharray="4 6" stroke-linecap="round"/>
+                <circle class="drip d1" cx="${pipeOutEndX}" cy="${pipeOutBendY + 9}" r="2.5" fill="${wTop}" opacity="0.8"/>
+                <circle class="drip d2" cx="${pipeOutEndX}" cy="${pipeOutBendY + 18}" r="2" fill="${wMid}" opacity="0.6"/>
+                <circle class="drip d3" cx="${pipeOutEndX}" cy="${pipeOutBendY + 26}" r="1.5" fill="${wMid}" opacity="0.4"/>
+              </g>
 
               <!-- 3D CYLINDER -->
               <g filter="url(#sh-${u})">
@@ -220,19 +232,22 @@ class WaterTankCard extends LitElement {
                 <rect x="${cx - rx}" y="${topY}" width="${rx * 2}" height="${bodyH}" fill="url(#cy-${u})"/>
                 <rect x="${cx - rx}" y="${topY}" width="5" height="${bodyH}" fill="white" fill-opacity="0.05"/>
 
-                <!-- WATER FILL — uses svg`` for correct SVG namespace -->
-                ${wp > 0 ? svg`
-                <path d="M${wL} ${waterSurfY} L${wL} ${botY} A${wRx} ${wRy} 0 0 1 ${wR} ${botY} L${wR} ${waterSurfY} Z" fill="${wBot}"/>
-                <path d="M${wL} ${waterSurfY} L${wL} ${botY} A${wRx} ${wRy} 0 0 1 ${wR} ${botY} L${wR} ${waterSurfY} Z" fill="${wMid}" opacity="0.55"/>
-                ${waterH > 15 ? svg`
-                <rect x="${wL}" y="${waterSurfY}" width="${wR - wL}" height="${Math.min(waterH * 0.35, 30)}" fill="${wTop}" opacity="0.3"/>
-                ` : svg``}
-                <rect x="${wL}" y="${waterSurfY}" width="10" height="${waterH}" fill="white" opacity="0.08"/>
-                ${waterH > 25 ? svg`
-                <ellipse cx="${cx - 8}" cy="${waterSurfY + waterH * 0.4}" rx="14" ry="7" fill="white" opacity="0.05"/>
-                <ellipse cx="${cx + 15}" cy="${waterSurfY + waterH * 0.65}" rx="10" ry="5" fill="white" opacity="0.04"/>
-                ` : svg``}
-                ` : svg``}
+                <!-- WATER FILL (always in DOM, toggled via display) -->
+                <g display="${showWater}">
+                  <!-- Base water layer -->
+                  <path d="${waterBodyPath}" fill="${wBot}"/>
+                  <!-- Mid tone overlay -->
+                  <path d="${waterBodyPath}" fill="${wMid}" opacity="0.55"/>
+                  <!-- Light top band -->
+                  <rect display="${showTopBand}" x="${wL}" y="${waterSurfY}" width="${wR - wL}" height="${topBandH}" fill="${wTop}" opacity="0.3"/>
+                  <!-- Left specular -->
+                  <rect x="${wL}" y="${waterSurfY}" width="10" height="${waterH}" fill="white" opacity="0.08"/>
+                  <!-- Caustic patches -->
+                  <g display="${showCaustics}">
+                    <ellipse cx="${cx - 8}" cy="${waterSurfY + waterH * 0.4}" rx="14" ry="7" fill="white" opacity="0.05"/>
+                    <ellipse cx="${cx + 15}" cy="${waterSurfY + waterH * 0.65}" rx="10" ry="5" fill="white" opacity="0.04"/>
+                  </g>
+                </g>
 
                 <!-- Walls -->
                 <line x1="${cx - rx}" y1="${topY}" x2="${cx - rx}" y2="${botY}" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.45"/>
@@ -241,43 +256,40 @@ class WaterTankCard extends LitElement {
                 <!-- Bottom ellipse -->
                 <path d="M${cx - rx} ${botY} A${rx} ${ry} 0 0 0 ${cx + rx} ${botY}" fill="var(--primary-text-color)" fill-opacity="0.08" stroke="var(--primary-text-color)" stroke-width="1.5" stroke-opacity="0.4"/>
 
-                <!-- Water surface -->
-                ${wp > 1 ? svg`
-                <ellipse class="water-surface" cx="${cx}" cy="${waterSurfY}" rx="${rx - 2}" ry="${ry - 1}" fill="${wTop}" fill-opacity="0.7" stroke="${wTop}" stroke-width="1" stroke-opacity="0.5"/>
-                <ellipse cx="${cx - 5}" cy="${waterSurfY - 1}" rx="${rx * 0.4}" ry="${ry * 0.25}" fill="white" opacity="0.18"/>
-                ` : svg``}
+                <!-- Water surface ellipse -->
+                <g display="${showSurface}">
+                  <ellipse class="water-surface" cx="${cx}" cy="${waterSurfY}" rx="${rx - 2}" ry="${ry - 1}" fill="${wTop}" fill-opacity="0.7" stroke="${wTop}" stroke-width="1" stroke-opacity="0.5"/>
+                  <ellipse cx="${cx - 5}" cy="${waterSurfY - 1}" rx="${rx * 0.4}" ry="${ry * 0.25}" fill="white" opacity="0.18"/>
+                </g>
 
                 <!-- Bottom water arc -->
-                ${wp > 0 ? svg`
-                <path d="M${wL} ${botY} A${wRx} ${wRy} 0 0 0 ${wR} ${botY}" fill="${wBot}" opacity="0.6"/>
-                ` : svg``}
+                <path display="${showWater}" d="${waterBotArc}" fill="${wBot}" opacity="0.6"/>
 
                 <!-- Front rim -->
                 <path d="M${cx - rx} ${topY} A${rx} ${ry} 0 0 0 ${cx + rx} ${topY}" fill="none" stroke="var(--primary-text-color)" stroke-width="1.8" stroke-opacity="0.5"/>
                 <path d="M${cx - rx + 12} ${topY + ry * 0.55} A${rx - 12} ${ry * 0.35} 0 0 0 ${cx + rx - 12} ${topY + ry * 0.55}" fill="none" stroke="white" stroke-width="0.8" stroke-opacity="0.15"/>
 
                 <!-- Bubbles -->
-                ${wp > 8 ? svg`
-                <circle class="bubble b1" cx="${cx - 16}" cy="${botY - 15}" r="2" fill="white" opacity="0.3"/>
-                <circle class="bubble b2" cx="${cx + 12}" cy="${botY - 10}" r="1.5" fill="white" opacity="0.25"/>
-                <circle class="bubble b3" cx="${cx + 24}" cy="${botY - 22}" r="2.2" fill="white" opacity="0.2"/>
-                <circle class="bubble b4" cx="${cx - 6}" cy="${botY - 8}" r="1.8" fill="white" opacity="0.28"/>
-                ` : svg``}
+                <g display="${showBubbles}">
+                  <circle class="bubble b1" cx="${cx - 16}" cy="${botY - 15}" r="2" fill="white" opacity="0.3"/>
+                  <circle class="bubble b2" cx="${cx + 12}" cy="${botY - 10}" r="1.5" fill="white" opacity="0.25"/>
+                  <circle class="bubble b3" cx="${cx + 24}" cy="${botY - 22}" r="2.2" fill="white" opacity="0.2"/>
+                  <circle class="bubble b4" cx="${cx - 6}" cy="${botY - 8}" r="1.8" fill="white" opacity="0.28"/>
+                </g>
               </g>
 
-              <!-- INFLOW STREAM -->
-              ${inflowRate > 0 ? svg`
-              <line class="flow-stream" x1="${pipeInEndX}" y1="${topY + ry + 2}" x2="${pipeInEndX}" y2="${Math.min(waterSurfY - 2, botY - 5)}" stroke="${wTop}" stroke-width="5" stroke-linecap="round" stroke-dasharray="6 8" opacity="0.85"/>
-              <circle class="splash s1" cx="${pipeInEndX - 8}" cy="${waterSurfY}" r="2" fill="${wTop}" opacity="0.6"/>
-              <circle class="splash s2" cx="${pipeInEndX + 7}" cy="${waterSurfY - 2}" r="1.8" fill="${wTop}" opacity="0.5"/>
-              <circle class="splash s3" cx="${pipeInEndX + 10}" cy="${waterSurfY - 1}" r="1.5" fill="${wTop}" opacity="0.5"/>
-              ` : svg``}
+              <!-- INFLOW STREAM (always in DOM, toggled via display) -->
+              <g display="${showInflow}">
+                <line class="flow-stream" x1="${pipeInEndX}" y1="${topY + ry + 2}" x2="${pipeInEndX}" y2="${inflowEndY}" stroke="${wTop}" stroke-width="5" stroke-linecap="round" stroke-dasharray="6 8" opacity="0.85"/>
+                <circle class="splash s1" cx="${pipeInEndX - 8}" cy="${waterSurfY}" r="2" fill="${wTop}" opacity="0.6"/>
+                <circle class="splash s2" cx="${pipeInEndX + 7}" cy="${waterSurfY - 2}" r="1.8" fill="${wTop}" opacity="0.5"/>
+                <circle class="splash s3" cx="${pipeInEndX + 10}" cy="${waterSurfY - 1}" r="1.5" fill="${wTop}" opacity="0.5"/>
+              </g>
 
               <!-- Level markers -->
-              ${[25, 50, 75].map(lvl => {
-                const mY = botY - (bodyH * lvl / 100);
-                return svg`<line x1="${cx - rx + 3}" y1="${mY}" x2="${cx - rx + 11}" y2="${mY}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>`;
-              })}
+              <line x1="${cx - rx + 3}" y1="${botY - bodyH * 0.25}" x2="${cx - rx + 11}" y2="${botY - bodyH * 0.25}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>
+              <line x1="${cx - rx + 3}" y1="${botY - bodyH * 0.5}" x2="${cx - rx + 11}" y2="${botY - bodyH * 0.5}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>
+              <line x1="${cx - rx + 3}" y1="${botY - bodyH * 0.75}" x2="${cx - rx + 11}" y2="${botY - bodyH * 0.75}" stroke="var(--primary-text-color)" stroke-width="0.5" stroke-opacity="0.25"/>
             </svg>
 
             <!-- Text overlay -->
